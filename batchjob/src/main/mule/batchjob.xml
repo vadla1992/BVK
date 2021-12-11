@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:batch="http://www.mulesoft.org/schema/mule/batch"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:file="http://www.mulesoft.org/schema/mule/file" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/batch http://www.mulesoft.org/schema/mule/batch/current/mule-batch.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="dd406ff3-3f5a-4f93-9e5b-b47631cd3080" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<file:config name="File_Config" doc:name="File Config" doc:id="c8fd0137-a22b-4ffd-855f-e1879b6ce9e2" />
+	<db:config name="Database_Config" doc:name="Database Config" doc:id="48c5ceb0-2a53-4585-8b0e-9deb919ac363" >
+		<db:oracle-connection host="localhost" user="SYSTEM" password="system" />
+	</db:config>
+	<file:config name="File_Config1" doc:name="File Config" doc:id="c684014e-1f75-4ce9-85b0-df0b9e49ebf6" />
+	<flow name="batchjobFlow" doc:id="d3837a52-0856-48b0-9124-089a1969efd4" >
+		<http:listener doc:name="Listener" doc:id="0e820ab9-2ad6-4cdd-a3ee-9b073989fbfc" config-ref="HTTP_Listener_config" path="/batch"/>
+		<file:read doc:name="Read" doc:id="269fce54-a592-4861-bd7d-b17c50b0dd87" config-ref="File_Config" path="C:\Users\ashok\Desktop\poc start/file.csv" outputMimeType="application/csv"/>
+		<ee:transform doc:name="Transform Message" doc:id="9294041a-a026-4b4b-afff-de047cebd050">
+						<ee:message>
+							<ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+payload]]></ee:set-payload>
+						</ee:message>
+					</ee:transform>
+		<batch:job jobName="batchjobBatch_Job" doc:id="5f96362b-43db-4d62-bfc8-18b8a60c6cbd">
+			<batch:process-records>
+				<batch:step name="Batch_Step" doc:id="df26fd3f-60ef-41fb-b32f-4e204ae186c9" acceptExpression="#[ ID== number ]">
+					<ee:transform doc:name="Transform Message" doc:id="bf3c6a4f-f6f6-40da-ab0d-3906a89c8e17">
+			<ee:message>
+				<ee:set-payload><![CDATA[ %dw 2.0
+output application/json
+---
+{
+	"ID":payload.ID,
+	"NAME":payload.NAME,
+	"ADDRESS":payload.ADDRESS,
+	"EMAIL":payload.EMAIL,
+	"PHONE":payload.PHONE
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+					<batch:aggregator doc:name="Batch Aggregator" doc:id="a1ac13a8-8890-4669-bb15-364285031ab4" size="5">
+						<ee:transform doc:name="Transform Message" doc:id="9002f9c0-2246-44cd-a13a-a99d35c1896c">
+							<ee:message>
+								<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+							</ee:message>
+						</ee:transform>
+					</batch:aggregator>
+					<db:insert doc:name="Insert" doc:id="2a9e167d-c5d1-4581-9bc6-5e7ad86823af" config-ref="Database_Config">
+						<db:sql><![CDATA[insert into ashok(ID,NAME,ADDRESS,EMAIL,PHONE )
+VALUES(:ID,:NAME,:ADDRESS,:EMAIL,:PHONE)]]></db:sql>
+						<db:input-parameters ><![CDATA[#[payload]]]></db:input-parameters>
+					</db:insert>
+				</batch:step>
+				<batch:step name="Batch_Step1" doc:id="48a9a438-207e-426e-acf7-7649e54ec36a" acceptPolicy="ONLY_FAILURES">
+					<ee:transform doc:name="Transform Message" doc:id="18083a36-ccee-4a51-b05a-12f077e7d4ea" >
+						<ee:message >
+							<ee:set-payload ><![CDATA[%dw 2.0
+output application/csv
+---
+payload]]></ee:set-payload>
+						</ee:message>
+					</ee:transform>
+					<file:write doc:name="Write" doc:id="6e6a8549-b221-43a2-a396-debb15a14ef4" config-ref="File_Config" path="C:\Users\ashok\Desktop\poc start\fail.csv"/>
+					<batch:aggregator doc:name="Batch Aggregator" doc:id="4355b38f-ea89-4ca2-8072-fb9e2a1090bb" size="2">
+						<logger level="INFO" doc:name="Logger" doc:id="e7397030-0955-49c1-84ad-c7a783bab05d" message="#[payload]"/>
+					</batch:aggregator>
+				</batch:step>
+			</batch:process-records>
+			<batch:on-complete>
+				<ee:transform doc:name="Transform Message" doc:id="e48297a9-1c07-4667-8003-699e6921f14f" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	payload:payload.successfulrecords,
+	payload:payload.totalRecords,
+	payload:payload.failedRecords,
+	payload:payload.processedRecords
+	
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</batch:on-complete>
+		</batch:job>
+	</flow>
+</mule>
